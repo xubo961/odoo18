@@ -504,6 +504,24 @@ describe('Paste', () => {
                     contentAfter: '<p>ax&nbsp; &nbsp; y[]d</p>',
                 });
             });
+            it('should paste a text on line break', async () => {
+                await testEditor(BasicEditor, {
+                    contentBefore: '<p>abc<br>[def]</p>',
+                    stepFunction: async editor => {
+                        await pasteText(editor, 'x');
+                    },
+                    contentAfter: '<p>abc<br>x[]</p>',
+                });
+            });
+            it('should paste a text at line-break when selected text is formatted', async () => {
+                await testEditor(BasicEditor, {
+                    contentBefore: '<p>abc<br><b>[def]</b></p>',
+                    stepFunction: async editor => {
+                        await pasteText(editor, 'x');
+                    },
+                    contentAfter: '<p>abc<br><b>x[]</b></p>',
+                });
+            });
             it('should paste a text in a span', async () => {
                 await testEditor(BasicEditor, {
                     contentBefore: '<p>a<span class="a">b[cd]e</span>f</p>',
@@ -2556,6 +2574,15 @@ describe('Paste', () => {
                         await pasteText(editor, 'http://www.xyz.com');
                     },
                     contentAfter: '<pre>http://www.xyz.com[]</pre>',
+                })
+            });
+            it('Should pad link with zws and put selection after the link', async () => {
+                await testEditor(BasicEditor, {
+                    contentBefore: '<p>[]<br></p>',
+                    stepFunction: async editor => {
+                        await pasteHtml(editor, '<p><a href="http://www.xyz.com">a</a></p><p><a href="http://existing.com">b</a></p>');
+                    },
+                    contentAfter: '<p><a href="http://www.xyz.com">a</a></p><p><a href="http://existing.com">b</a>[]</p>',
                 });
             });
         });

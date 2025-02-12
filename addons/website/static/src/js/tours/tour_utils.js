@@ -192,7 +192,7 @@ export function clickOnElement(elementName, selector) {
 export function clickOnEditAndWaitEditMode(position = "bottom") {
     return [{
         content: markup(_t("<b>Click Edit</b> to start designing your homepage.")),
-        trigger: ".o_menu_systray .o_edit_website_container a",
+        trigger: "body:not(.editor_has_snippets) .o_menu_systray .o_edit_website_container a",
         tooltipPosition: position,
         run: "click",
     }, {
@@ -272,10 +272,16 @@ export function clickOnSave(position = "bottom", timeout) {
             run: "click",
         },
         {
-            isActive: ["auto"], // Just making sure save is finished in automatic tests
-            trigger: ":iframe body:not(.editor_enable)",
+            isActive: ["auto"],
+            trigger:
+                "body:not(.editor_enable):not(.editor_has_snippets):not(:has(.o_notification_bar))",
             noPrepend: true,
             timeout: timeout,
+        },
+        {
+            isActive: ["auto"],
+            trigger: "[is-ready=true]:iframe",
+            noPrepend: true,
         },
     ];
 }
@@ -406,17 +412,23 @@ export function getClientActionUrl(path, edition) {
 }
 
 export function clickOnExtraMenuItem(stepOptions, backend = false) {
-    return Object.assign({
-        content: "Click on the extra menu dropdown toggle if it is there",
-        trigger: `${backend ? ":iframe" : ""} .top_menu`,
-        async run(actions) {
-            const extraMenuButton = this.anchor.querySelector(".o_extra_menu_items a.nav-link");
-            // Don't click on the extra menu button if it's already visible.
-            if (extraMenuButton && !extraMenuButton.classList.contains("show")) {
-                await actions.click(extraMenuButton);
-            }
+    return Object.assign(
+        {
+            content: "Click on the extra menu dropdown toggle if it is there and not shown",
+            trigger: `${
+                backend ? ":iframe" : ""
+            } ul.top_menu`,
+            run(actions) {
+                // Note: the button might not exist (it only appear if there is many menu items)
+                const extraMenuButton = this.anchor.querySelector(".o_extra_menu_items a.nav-link");
+                // Don't click on the extra menu button if it's already visible.
+                if (extraMenuButton && !extraMenuButton.classList.contains("show")) {
+                    actions.click(extraMenuButton);
+                }
+            },
         },
-    }, stepOptions);
+        stepOptions
+    );
 }
 
 /**
@@ -432,6 +444,7 @@ export function registerWebsitePreviewTour(name, options, steps) {
     if (typeof steps !== "function") {
         throw new Error(`tour.steps has to be a function that returns TourStep[]`);
     }
+    registry.category("web_tour.tours").remove(name);
     return registry.category("web_tour.tours").add(name, {
         ...omit(options, "edition"),
         url: getClientActionUrl(options.url, !!options.edition),
@@ -464,9 +477,10 @@ export function registerThemeHomepageTour(name, steps) {
     if (typeof steps !== "function") {
         throw new Error(`tour.steps has to be a function that returns TourStep[]`);
     }
-    return registerWebsitePreviewTour(name, {
-        url: '/',
-        saveAs: "homepage", // disable manual mode for theme homepage tours - FIXME
+    return registerWebsitePreviewTour(
+        "homepage",
+        {
+            url: "/",
         },
         () => [
             ...clickOnEditAndWaitEditMode(),
@@ -474,7 +488,8 @@ export function registerThemeHomepageTour(name, steps) {
                 steps().concat(clickOnSave()),
                 ".o_website_preview[data-view-xmlid='website.homepage'] "
             ),
-    ]);
+        ]
+    );
 }
 
 export function registerBackendAndFrontendTour(name, options, steps) {

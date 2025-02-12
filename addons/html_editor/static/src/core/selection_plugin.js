@@ -162,6 +162,7 @@ export class SelectionPlugin extends Plugin {
             if (ev.detail >= 3) {
                 this.correctTripleClick = true;
             }
+            this.handleEmptySelection();
         });
         this.addDomListener(this.editable, "keydown", (ev) => {
             const handled = [
@@ -188,6 +189,36 @@ export class SelectionPlugin extends Plugin {
 
     resetSelection() {
         this.activeSelection = this.makeActiveSelection();
+    }
+
+    handleEmptySelection() {
+        const selection = this.getEditableSelection();
+        if (selection.anchorNode && !selection.isCollapsed) {
+            const [deepAnchorNode, deepAnchorOffset] = getDeepestPosition(
+                selection.anchorNode,
+                selection.anchorOffset
+            );
+            const [deepFocusNode, deepFocusOffset] = getDeepestPosition(
+                selection.focusNode,
+                selection.focusOffset
+            );
+
+            const range = new Range();
+            range.setStart(deepAnchorNode, deepAnchorOffset);
+            range.setEnd(deepFocusNode, deepFocusOffset);
+            const rangeContentChildNodes = range.cloneContents().childNodes;
+            if (
+                rangeContentChildNodes.length === 1 &&
+                rangeContentChildNodes[0].nodeName === "BR"
+            ) {
+                this.setSelection({
+                    anchorNode: deepAnchorNode,
+                    anchorOffset: 0,
+                    focusNode: deepAnchorNode,
+                    focusOffset: 0,
+                });
+            }
+        }
     }
 
     /**
@@ -244,7 +275,15 @@ export class SelectionPlugin extends Plugin {
             if (anchorNode === focusNode && focusOffset < anchorOffset) {
                 direction = !direction;
             }
-
+            if (
+                this.activeSelection &&
+                (isProtecting(anchorNode) ||
+                    (isProtected(anchorNode) && !isUnprotecting(anchorNode)))
+            ) {
+                // Keep the previous activeSelection in case of user interactions
+                // inside a protected zone.
+                return this.activeSelection;
+            }
             [anchorNode, anchorOffset] = normalizeCursorPosition(
                 anchorNode,
                 anchorOffset,
@@ -400,14 +439,14 @@ export class SelectionPlugin extends Plugin {
         Object.defineProperty(selectionData, "documentSelectionIsProtecting", {
             get: function () {
                 return documentSelection?.anchorNode
-                    ? isProtected(documentSelection.anchorNode)
+                    ? isProtecting(documentSelection.anchorNode)
                     : false;
             }.bind(this),
         });
         Object.defineProperty(selectionData, "documentSelectionIsProtected", {
             get: function () {
                 return documentSelection?.anchorNode
-                    ? isProtecting(documentSelection.anchorNode)
+                    ? isProtected(documentSelection.anchorNode)
                     : false;
             }.bind(this),
         });

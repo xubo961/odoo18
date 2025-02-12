@@ -13,6 +13,7 @@ from odoo.addons.point_of_sale.tests.common_setup_methods import setup_product_c
 from datetime import date, timedelta
 from odoo.addons.point_of_sale.tests.common import archive_products
 from odoo.exceptions import UserError
+from odoo.addons.point_of_sale.models.pos_config import PosConfig
 
 _logger = logging.getLogger(__name__)
 
@@ -581,6 +582,7 @@ class TestUi(TestPointOfSaleHttpCommon):
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'pos_basic_order_01_multi_payment_and_change', login="pos_user")
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'pos_basic_order_02_decimal_order_quantity', login="pos_user")
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'pos_basic_order_03_tax_position', login="pos_user")
+        self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'FloatingOrderTour', login="pos_user")
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'ProductScreenTour', login="pos_user")
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'PaymentScreenTour', login="pos_user")
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'ReceiptScreenTour', login="pos_user")
@@ -718,7 +720,7 @@ class TestUi(TestPointOfSaleHttpCommon):
         self.env['product.product'].create({
             'name': 'Product Test',
             'available_in_pos': True,
-            'list_price': 1.98,
+            'list_price': 1.96,
             'taxes_id': False,
         })
 
@@ -1226,6 +1228,33 @@ class TestUi(TestPointOfSaleHttpCommon):
         self.main_pos_config.with_user(self.pos_user).open_ui()
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'limitedProductPricelistLoading', login="pos_user")
 
+    def test_multi_product_pricelist_rules(self):
+        product_1 = self.env['product.product'].create({
+            'name': 'Test Product 1',
+            'list_price': 1,
+            'taxes_id': False,
+            'available_in_pos': True,
+        })
+
+        pricelist_item = self.env['product.pricelist.item'].create([{
+            'applied_on': '3_global',
+            'fixed_price': 200,
+            'min_quantity': 0,
+        }, {
+            'applied_on': '1_product',
+            'product_tmpl_id': product_1.product_tmpl_id.id,
+            'fixed_price': 100,
+             'min_quantity': 2,
+        }, {
+            'applied_on': '0_product_variant',
+            'product_id': product_1.id,
+            'fixed_price': 50,
+            'min_quantity': 3,
+        }])
+        self.main_pos_config.pricelist_id.write({'item_ids': [(6, 0, pricelist_item.ids)]})
+        self.main_pos_config.with_user(self.pos_user).open_ui()
+        self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'multiPricelistRulesTour', login="pos_user")
+
     def test_multi_product_options(self):
         self.pos_user.write({
             'groups_id': [
@@ -1474,23 +1503,32 @@ class TestUi(TestPointOfSaleHttpCommon):
 
     def test_product_categories_order(self):
         """ Verify that the order of categories doesnt change in the frontend """
-        self.env['pos.category'].create({
+        self.env['pos.category'].search([]).write({'sequence': 100})
+        catgA = self.env['pos.category'].create({
             'name': 'AAA',
             'parent_id': False,
+            'sequence': 1,
         })
-        self.env['pos.category'].create({
+        catgB = self.env['pos.category'].create({
             'name': 'AAC',
             'parent_id': False,
+            'sequence': 3,
+        })
+        self.env['pos.category'].create({
+            'name': 'AAD',
+            'parent_id': False,
+            'sequence': 4,
         })
         parentA = self.env['pos.category'].create({
             'name': 'AAB',
             'parent_id': False,
+            'sequence': 2,
         })
         parentB = self.env['pos.category'].create({
             'name': 'AAX',
             'parent_id': parentA.id,
         })
-        self.env['pos.category'].create({
+        catgC = self.env['pos.category'].create({
             'name': 'AAY',
             'parent_id': parentB.id,
         })
@@ -1498,7 +1536,7 @@ class TestUi(TestPointOfSaleHttpCommon):
         # It's presence is checked during the tour to make sure app doesn't crash.
         self.env['product.product'].create({
             'name': 'Product in AAB and AAX',
-            'pos_categ_ids': [(6, 0, [parentA.id, parentB.id])],
+            'pos_categ_ids': [(6, 0, [parentA.id, parentB.id, catgA.id, catgB.id, catgC.id])],
             'available_in_pos': True,
         })
         self.main_pos_config.with_user(self.pos_admin).open_ui()
@@ -1561,6 +1599,18 @@ class TestUi(TestPointOfSaleHttpCommon):
 
         self.main_pos_config.with_user(self.pos_user).open_ui()
         self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'ProductSearchTour', login="pos_user")
+
+    def test_customer_search_more(self):
+        partner_test_a = self.env["res.partner"].create({"name": "APartner"})
+        self.env["res.partner"].create({"name": "BPartner", "zip": 1111})
+
+        def mocked_get_limited_partners_loading(self):
+            return [(partner_test_a.id,)]
+
+        self.main_pos_config.with_user(self.pos_user).open_ui()
+        with patch.object(PosConfig, 'get_limited_partners_loading', mocked_get_limited_partners_loading):
+            self.main_pos_config.with_user(self.pos_user).open_ui()
+            self.start_tour(f"/pos/ui?config_id={self.main_pos_config.id}", 'SearchMoreCustomer', login="pos_user")
 
 
 # This class just runs the same tests as above but with mobile emulation

@@ -26,9 +26,15 @@ patch(PosData.prototype, {
             ? super.syncDataWithIndexedDB(...arguments)
             : true;
     },
+    intializeWebsocket() {
+        return false;
+    },
     async loadIndexedDBData() {
         return session.data.self_ordering_mode === "mobile"
             ? await super.loadIndexedDBData(...arguments)
             : {};
+    },
+    async missingRecursive(recordMap) {
+        return recordMap;
     },
 });
